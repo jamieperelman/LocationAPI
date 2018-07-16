@@ -12,6 +12,8 @@ namespace LocationAPI
         protected void Application_Start()
         {
             GlobalConfiguration.Configure(WebApiConfig.Register);
+
+            System.Web.Mvc.AreaRegistration.RegisterAllAreas(); 
         }
     }
 }
