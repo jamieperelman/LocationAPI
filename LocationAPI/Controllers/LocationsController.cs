@@ -186,6 +186,12 @@ namespace LocationAPI.Controllers
             db.Locations.Remove(location);
             await db.SaveChangesAsync();
 
+            //remove weather from cache if there
+            string cacheKey = $"{id},{location.Name},{location.Country}";
+            if (HttpContext.Current.Cache[cacheKey] != null)
+            {
+                HttpContext.Current.Cache.Remove(cacheKey);
+            }
 
             return Ok(location);
         }
