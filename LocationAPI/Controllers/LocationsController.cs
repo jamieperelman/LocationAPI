@@ -86,15 +86,15 @@ namespace LocationAPI.Controllers
                 System.Diagnostics.Debug.WriteLine($"Getting current weather <{cacheKey}>...");                                              
                 var response = await client.GetAsync($"{apiUrl}/weather?q={location.Name},{location.Country}&units={units}&APPID={apiKey}");
                 //TO DO: retry a couple of times on failure, spaced out by second and then 5 seconds?                 
-                weatherObj = JObject.Parse(await response.Content.ReadAsStringAsync());                               
+                weatherObj["current"] = JObject.Parse(await response.Content.ReadAsStringAsync());
 
                 //then get forcast and merge together for one Json Object to return
                 //need to check previous response does not have error - or deal with error later after trying both?
                 if (response.IsSuccessStatusCode)
                 {
                     System.Diagnostics.Debug.WriteLine($"Getting future forecast <{id}>...");
-                    response = await client.GetAsync($"{apiUrl}/forecast?q={location.Name},{location.Country}&units={units}&APPID={apiKey}");                    
-                    weatherObj.Merge(JObject.Parse(await response.Content.ReadAsStringAsync()));
+                    response = await client.GetAsync($"{apiUrl}/forecast?q={location.Name},{location.Country}&units={units}&APPID={apiKey}");
+                    weatherObj["future"] = (JObject.Parse(await response.Content.ReadAsStringAsync()));
 
                     //put weather object into cache - key is location id
                     //do not cache if failure
