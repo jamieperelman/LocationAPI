@@ -54,54 +54,60 @@ namespace LocationAPI.Controllers
         [ResponseType(typeof(Location))]
         public async Task<IHttpActionResult> GetWeather(int id)
         {
-            JObject weatherObj = null;                                  
+            //weather JSON object
+            JObject weatherObj = new JObject();
+
+            //get location object - if location is not in db, declare not found
+            Location location = await db.Locations.FindAsync(id);           
+            if (location == null)
+            {
+                return NotFound();
+            }
+
+            //key to identify correct weather in cache
+            string cacheKey = $"{id},{location.Name},{location.Country}";
 
             //check cache first
-            if (HttpContext.Current.Cache[$"{id}"] != null)
+            if (HttpContext.Current.Cache[cacheKey] != null)
             {
-                weatherObj = HttpContext.Current.Cache[$"{id}"] as JObject;
-                System.Diagnostics.Debug.WriteLine($"Getting <{id}> from cache..."); 
+                System.Diagnostics.Debug.WriteLine($"Getting <{cacheKey}> from cache...");
+                weatherObj = HttpContext.Current.Cache[$"{cacheKey}"] as JObject;                
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"Getting <{id}> from API...");
                 //not in cache - pull name out of location
-                Location location = await db.Locations.FindAsync(id);
-            
-                if (location == null)
-                {
-                    return NotFound();
-                }
+                System.Diagnostics.Debug.WriteLine($"Getting <{id}> from API...");                               
+                
+                //set headers to return json
                 client.DefaultRequestHeaders.Accept.Clear();
                 client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
                 //first get current weather - TO DO: should encode location name/country? 
-                System.Diagnostics.Debug.WriteLine($"Getting current weather <{id}>...");                              
+                System.Diagnostics.Debug.WriteLine($"Getting current weather <{cacheKey}>...");                                              
                 var response = await client.GetAsync($"{apiUrl}/weather?q={location.Name},{location.Country}&units={units}&APPID={apiKey}");
-                //TO DO: retry a couple of times on failure, spaced out by second and then 5 seconds? 
+                //TO DO: retry a couple of times on failure, spaced out by second and then 5 seconds?                 
                 weatherObj = JObject.Parse(await response.Content.ReadAsStringAsync());                               
 
                 //then get forcast and merge together for one Json Object to return
-                //need to check previous response does not have error
+                //need to check previous response does not have error - or deal with error later after trying both?
                 if (response.IsSuccessStatusCode)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Getting forcast <{id}>...");
-                    response = await client.GetAsync($"{apiUrl}/forecast?q={location.Name},{location.Country}&units={units}&APPID={apiKey}");
-                                
+                    System.Diagnostics.Debug.WriteLine($"Getting future forecast <{id}>...");
+                    response = await client.GetAsync($"{apiUrl}/forecast?q={location.Name},{location.Country}&units={units}&APPID={apiKey}");                    
                     weatherObj.Merge(JObject.Parse(await response.Content.ReadAsStringAsync()));
 
                     //put weather object into cache - key is location id
                     //do not cache if failure
                     if (response.IsSuccessStatusCode)
                     {
-                        HttpContext.Current.Cache.Insert($"{id}", weatherObj, null, DateTime.Now.AddMinutes(5), Cache.NoSlidingExpiration);
+                        HttpContext.Current.Cache.Insert($"{cacheKey}", weatherObj, null, DateTime.Now.AddMinutes(5), Cache.NoSlidingExpiration);
                     }
                 }  
 
                 //double check that if either response was unsuccessful, we pass that message on.
-                if ( !response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    System.Diagnostics.Debug.WriteLine($"There was an error getting weather data for location <{id}> <{response.StatusCode}>");
+                    System.Diagnostics.Debug.WriteLine($"There was an error getting weather data for location <{cacheKey}> <{response.StatusCode}>");
                     return ResponseMessage(response);
                 }
 
@@ -176,9 +182,10 @@ namespace LocationAPI.Controllers
             {
                 return NotFound();
             }
-
+            
             db.Locations.Remove(location);
             await db.SaveChangesAsync();
+
 
             return Ok(location);
         }
